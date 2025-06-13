@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { postUser } from "../../comunication/FetchUser";
 import zxcvbn from 'zxcvbn';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 function RegisterUser({ loginValues, setLoginValues }) {
   const navigate = useNavigate();
+  const recaptchaRef = useRef();
 
   const initialState = {
     firstName: "",
@@ -12,18 +14,19 @@ function RegisterUser({ loginValues, setLoginValues }) {
     email: "",
     password: "",
     passwordConfirmation: "",
+    captcha: ""
   };
 
   const [credentials, setCredentials] = useState(initialState);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Passwort Score
   const [passwordScore, setPasswordScore] = useState(null);
   const [passwordFeedback, setPasswordFeedback] = useState('');
 
+  const [captchaToken, setCaptchaToken] = useState('');
+
   const handlePasswordChange = (e) => {
     const pw = e.target.value;
-    // Neues Passwort in Credentials speichern
     setCredentials(prev => ({ ...prev, password: pw }));
 
     if (pw.length > 0) {
@@ -40,7 +43,6 @@ function RegisterUser({ loginValues, setLoginValues }) {
     }
   };
 
-  // Score als Text anzeigen
   const mapScoreToText = (score) => {
     switch (score) {
       case 0:
@@ -60,28 +62,34 @@ function RegisterUser({ loginValues, setLoginValues }) {
     e.preventDefault();
     setErrorMessage('');
 
-    // Passwort und Bestätigung muss gleich sein
     if (credentials.password !== credentials.passwordConfirmation) {
-      console.log("password != passwordConfirmation");
       setErrorMessage('Password und Bestätigung stimmen nicht überein.');
       return;
     }
 
-    // Score min. 2
     if (passwordScore < 2) {
       setErrorMessage('Bitte wähle ein stärkeres Passwort (mindestens "Mittel").');
       return;
     }
 
+    if (!captchaToken) {
+      setErrorMessage('Bitte bestätige, dass du kein Roboter bist.');
+      return;
+    }
+
     try {
       await postUser(credentials);
+
       setLoginValues({
         userName: credentials.email,
         password: credentials.password
       });
+
       setCredentials(initialState);
       setPasswordScore(null);
       setPasswordFeedback('');
+      setCaptchaToken('');
+      recaptchaRef.current.reset(); // reCAPTCHA zurücksetzen
       navigate('/');
     } catch (error) {
       console.error('Fehler beim Senden an den Server:', error.message);
@@ -136,9 +144,9 @@ function RegisterUser({ loginValues, setLoginValues }) {
             <div>
               <label>Password:</label>
               <input
-                type="password"               
+                type="password"
                 value={credentials.password}
-                onChange={handlePasswordChange} 
+                onChange={handlePasswordChange}
                 required
                 placeholder="Please enter your pwd *"
               />
@@ -171,10 +179,18 @@ function RegisterUser({ loginValues, setLoginValues }) {
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={passwordScore < 2}  // Button gesperrt solange Score < 2
-        >
+        <div style={{ marginBottom: '1rem' }}>
+          <ReCAPTCHA
+            ref={recaptchaRef}
+            sitekey="6LfIJV8rAAAAADTXLM7IJm0tEWqNF32l5AMWVE6P" // Webiste Key
+            onChange={(token) => {
+              setCaptchaToken(token);
+              setCredentials(prev => ({ ...prev, captcha: token }));
+            }}
+          />
+        </div>
+
+        <button type="submit" disabled={passwordScore < 2}>
           Register
         </button>
 
